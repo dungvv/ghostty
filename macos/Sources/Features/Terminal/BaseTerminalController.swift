@@ -59,6 +59,11 @@ class BaseTerminalController: NSWindowController,
     /// Set if the terminal view should show the update overlay.
     @Published var updateOverlayIsVisible: Bool = false
 
+    /// Whether the SSH connection sidebar is shown. This defaults to false so
+    /// windows that don't opt in (the quick terminal) never get a sidebar;
+    /// `TerminalController` seeds it from the configuration instead.
+    @Published var sshSidebarIsVisible: Bool = false
+
     /// True when any surface in this controller currently has an active bell.
     @Published private(set) var bell: Bool = false
 

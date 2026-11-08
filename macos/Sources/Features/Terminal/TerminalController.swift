@@ -78,6 +78,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         super.init(ghostty, baseConfig: base, surfaceTree: tree)
 
+        // The configuration decides the state a new window starts in. After
+        // this the sidebar is toggled per-window from the View menu, which we
+        // deliberately don't persist.
+        self.sshSidebarIsVisible = ghostty.config.sshSidebar
+
         // Setup our notifications for behaviors
         let center = NotificationCenter.default
         center.addObserver(
@@ -564,6 +569,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             // Update our derived config
             self.derivedConfig = DerivedConfig(config)
             syncRestoration(config)
+
+            // Reloading the config resets the sidebar to the configured
+            // state, discarding any temporary toggle from the View menu.
+            self.sshSidebarIsVisible = config.sshSidebar
 
             // If we have no surfaces in our window (is that possible?) then we update
             // our window appearance based on the root config. If we have surfaces, we

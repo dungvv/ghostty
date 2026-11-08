@@ -391,6 +391,29 @@ extension Ghostty {
             return v
         }
 
+        /// Whether new terminal windows start with the SSH connection sidebar
+        /// shown. This is only the initial state; the sidebar can be toggled
+        /// per window from the View menu.
+        var sshSidebar: Bool {
+            guard let config = self.config else { return false }
+            var v = false
+            let key = "macos-ssh-sidebar"
+            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
+            return v
+        }
+
+        /// Width of the SSH connection sidebar, in points.
+        var sshSidebarWidth: CGFloat {
+            let defaultValue: CGFloat = 260
+            let minimumValue: CGFloat = 160
+            guard let config = self.config else { return defaultValue }
+            var v: UInt32?
+            let key = "macos-ssh-sidebar-width"
+            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))),
+                  let v else { return defaultValue }
+            return max(minimumValue, CGFloat(v))
+        }
+
         var macosIcon: MacOSIcon {
             let defaultValue = MacOSIcon.official
             guard let config = self.config else { return defaultValue }

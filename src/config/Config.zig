@@ -3533,6 +3533,27 @@ keybind: Keybinds = .{},
 /// find false more visually appealing.
 @"macos-window-shadow": bool = true,
 
+/// Show a sidebar on the left of every terminal window listing your saved
+/// SSH connections, grouped by the group assigned to each one.
+///
+/// This only sets the state a newly opened window starts in. The sidebar can
+/// still be shown or hidden for the focused window at any time from
+/// View > Show SSH Sidebar, and that choice is not persisted.
+///
+/// Connections are managed from File > SSH Connections, and are stored
+/// separately from this file. The sidebar never appears in the quick terminal.
+///
+/// Only implemented on macOS.
+@"macos-ssh-sidebar": bool = false,
+
+/// The width, in points, of the sidebar enabled by `macos-ssh-sidebar`.
+///
+/// Values below 160 are clamped to 160, since anything narrower can't show a
+/// connection name and its buttons at the same time.
+///
+/// Only implemented on macOS.
+@"macos-ssh-sidebar-width": u32 = 260,
+
 /// If true, the macOS icon in the dock and app switcher will be hidden. This is
 /// mainly intended for those primarily using the quick-terminal mode.
 ///
