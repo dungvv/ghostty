@@ -579,7 +579,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellh.ghostty;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dungvv.ghostty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Sources/App/ghostty-bridging-header.h";
@@ -673,7 +673,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-dock-tile";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.dungvv.ghostty-dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -702,7 +702,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-dock-tile";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.dungvv.ghostty-dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -731,7 +731,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-dock-tile";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.dungvv.ghostty-dock-tile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -976,7 +976,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellh.ghostty.debug;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dungvv.ghostty.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Sources/App/ghostty-bridging-header.h";
@@ -1031,7 +1031,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellh.ghostty;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dungvv.ghostty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Sources/App/ghostty-bridging-header.h";
