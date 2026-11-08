@@ -9,6 +9,7 @@ const font = @import("../font/main.zig");
 const inputpkg = @import("../input.zig");
 const os = @import("../os/main.zig");
 const terminal = @import("../terminal/main.zig");
+const unicode = @import("../unicode/main.zig");
 const renderer = @import("../renderer.zig");
 const math = @import("../math.zig");
 const Surface = @import("../Surface.zig");
@@ -47,7 +48,9 @@ const DisplayLink = switch (builtin.target.os.tag) {
 };
 
 const log = std.log.scoped(.generic_renderer);
-
+/// Alpha applied to inline suggestion text. Low enough to read as a hint,
+/// high enough to still be legible on a dark background.
+const suggestion_alpha: u8 = 110;
 /// Create a renderer type with the provided graphics API wrapper.
 ///
 /// The graphics API wrapper must provide the interface outlined below.
@@ -623,6 +626,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             background_blur: configpkg.Config.BackgroundBlur,
             scroll_to_bottom_on_output: bool,
             custom_shader_animation: configpkg.CustomShaderAnimation,
+            suggestions: bool,
 
             pub fn init(
                 alloc_gpa: Allocator,
@@ -697,6 +701,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .blending = config.@"alpha-blending",
                     .background_blur = config.@"background-blur",
                     .scroll_to_bottom_on_output = config.@"scroll-to-bottom".output,
+                    .suggestions = config.suggestions,
                     .custom_shader_animation = config.@"custom-shader-animation",
                     .arena = arena,
                 };
@@ -1401,6 +1406,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 links: terminal.RenderState.CellSet,
                 mouse: renderer.State.Mouse,
                 preedit: ?renderer.State.Preedit,
+                suggestion: ?renderer.State.Preedit,
                 scrollbar: terminal.Scrollbar,
                 overlay_features: []const Overlay.Feature,
             };
@@ -1505,6 +1511,48 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     break :preedit try p.clone(arena_alloc);
                 };
 
+                // Work out the inline suggestion. We do this here because
+                // this is where we hold the terminal lock, and reading what
+                // the user has typed means reading the screen.
+                const suggestion: ?renderer.State.Preedit = suggestion: {
+                    if (!self.config.suggestions) break :suggestion null;
+
+                    // Never compete with an input method.
+                    if (preedit != null) break :suggestion null;
+
+                    const store = state.suggestions orelse break :suggestion null;
+
+                    // Shell integration tells us whether the shell is waiting
+                    // for a command. Without it we'd be guessing, and we'd
+                    // draw over full screen programs.
+                    if (!state.terminal.cursorIsAtPrompt()) break :suggestion null;
+
+                    const screen = state.terminal.screens.active;
+                    const input = (screen.currentInput(arena_alloc) catch
+                        break :suggestion null) orelse break :suggestion null;
+
+                    const full = store.match(input) orelse break :suggestion null;
+                    const rest = full[input.len..];
+                    if (rest.len == 0) break :suggestion null;
+
+                    var codepoints: std.ArrayList(renderer.State.Preedit.Codepoint) = .empty;
+                    var utf8: std.unicode.Utf8Iterator = .{
+                        .bytes = rest,
+                        .i = 0,
+                    };
+                    while (utf8.nextCodepoint()) |cp| {
+                        const width = unicode.table.get(cp).width;
+                        if (width == 0) continue;
+                        try codepoints.append(arena_alloc, .{
+                            .codepoint = cp,
+                            .wide = width == 2,
+                        });
+                    }
+                    if (codepoints.items.len == 0) break :suggestion null;
+
+                    break :suggestion .{ .codepoints = codepoints.items };
+                };
+
                 // Rebuild our Kitty image placements when the placements
                 // or the images changed. The render state update above
                 // has already positioned every placement, so this is
@@ -1556,6 +1604,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .links = links,
                     .mouse = state.mouse,
                     .preedit = preedit,
+                    .suggestion = suggestion,
                     .scrollbar = scrollbar,
                     .overlay_features = overlay_features,
                 };
@@ -1650,6 +1699,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // Build our GPU cells
                 self.rebuildCells(
                     critical.preedit,
+                    critical.suggestion,
                     renderer.cursorStyle(&self.terminal_state, .{
                         .preedit = critical.preedit != null,
                         .focused = self.focused,
@@ -2630,6 +2680,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         fn rebuildCells(
             self: *Self,
             preedit: ?renderer.State.Preedit,
+            suggestion: ?renderer.State.Preedit,
             cursor_style_: ?renderer.CursorStyle,
             links: *const terminal.RenderState.CellSet,
         ) Allocator.Error!void {
@@ -2712,6 +2763,21 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     state.cols - 1,
                 );
                 break :preedit .{
+                    .y = @intCast(cursor_vp.y),
+                    .x = .{ range.start, range.end },
+                    .cp_offset = range.cp_offset,
+                };
+            } else null;
+
+            // Same geometry as the preedit: the suggestion starts at the
+            // cursor and runs right until the row ends.
+            const suggestion_range: ?PreeditRange = if (suggestion) |s_v| suggestion: {
+                const cursor_vp = state.cursor.viewport orelse
+                    break :suggestion null;
+                if (!rebuild and !row_dirty[cursor_vp.y]) break :suggestion null;
+
+                const range = s_v.range(cursor_vp.x, state.cols - 1);
+                break :suggestion .{
                     .y = @intCast(cursor_vp.y),
                     .x = .{ range.start, range.end },
                     .cp_offset = range.cp_offset,
@@ -2903,6 +2969,29 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                         state.colors.foreground,
                     ) catch |err| {
                         log.warn("error building preedit cell, will be invalid x={} y={}, err={}", .{
+                            x,
+                            range.y,
+                            err,
+                        });
+                    };
+
+                    x += if (cp.wide) 2 else 1;
+                }
+            }
+
+            // Draw the inline suggestion. Dimmed, with no underline, so it
+            // reads as "not yet typed" rather than as real output.
+            if (suggestion) |suggestion_v| suggestion: {
+                const range = suggestion_range orelse break :suggestion;
+                var x = range.x[0];
+                for (suggestion_v.codepoints[range.cp_offset..]) |cp| {
+                    if (x > range.x[1]) break;
+                    self.addSuggestionCell(
+                        cp,
+                        .{ .x = x, .y = range.y },
+                        state.colors.foreground,
+                    ) catch |err| {
+                        log.warn("error building suggestion cell x={} y={} err={}", .{
                             x,
                             range.y,
                             err,
@@ -3669,6 +3758,46 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             if (cp.wide and coord.x < self.cells.size.columns - 1) {
                 try self.addUnderline(@intCast(coord.x + 1), @intCast(coord.y), .single, screen_fg, 255);
             }
+        }
+
+        /// Render one codepoint of the inline suggestion.
+        ///
+        /// This is `addPreeditCell` without the underline and at reduced
+        /// alpha: the text is a hint about what you could type, so it must
+        /// not read as something you already typed.
+        fn addSuggestionCell(
+            self: *Self,
+            cp: renderer.State.Preedit.Codepoint,
+            coord: terminal.Coordinate,
+            screen_fg: terminal.color.RGB,
+        ) !void {
+            const render_ = self.font_grid.renderCodepoint(
+                self.alloc,
+                @intCast(cp.codepoint),
+                .regular,
+                .text,
+                .{
+                    .grid_metrics = self.grid_metrics,
+                    .thicken = self.config.font_thicken,
+                    .thicken_strength = self.config.font_thicken_strength,
+                },
+            ) catch |err| {
+                log.warn("error rendering suggestion glyph err={}", .{err});
+                return;
+            };
+            const render = render_ orelse return;
+
+            try self.cells.add(self.alloc, .text, .{
+                .atlas = .grayscale,
+                .grid_pos = .{ @intCast(coord.x), @intCast(coord.y) },
+                .color = .{ screen_fg.r, screen_fg.g, screen_fg.b, suggestion_alpha },
+                .glyph_pos = .{ render.glyph.atlas_x, render.glyph.atlas_y },
+                .glyph_size = .{ render.glyph.width, render.glyph.height },
+                .bearings = .{
+                    @intCast(render.glyph.offset_x),
+                    @intCast(render.glyph.offset_y),
+                },
+            });
         }
 
         /// Sync the atlas data to the given texture. This copies the bytes

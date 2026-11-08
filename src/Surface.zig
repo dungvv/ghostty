@@ -11,6 +11,8 @@
 //! (i.e. with focus, without focus, and so on).
 const Surface = @This();
 
+const Suggestions = @import("Suggestions.zig");
+
 const apprt = @import("apprt.zig");
 pub const Mailbox = apprt.surface.Mailbox;
 pub const Message = apprt.surface.Message;
@@ -94,6 +96,11 @@ renderer: Renderer,
 
 /// The render state
 renderer_state: rendererpkg.State,
+
+/// Candidate commands for inline suggestions. Owned here because it is
+/// per surface state that both the renderer (to draw) and the key handler
+/// (to accept) need to read.
+suggestions: Suggestions,
 
 /// The renderer thread manager
 renderer_thread: rendererpkg.Thread,
@@ -352,6 +359,9 @@ const DerivedConfig = struct {
     notify_on_command_finish_after: Duration,
     key_remaps: input.KeyRemapSet,
 
+    /// Whether inline command suggestions are enabled.
+    suggestions: bool,
+
     const Link = struct {
         regex: oni.Regex,
         action: input.Link.Action,
@@ -432,6 +442,7 @@ const DerivedConfig = struct {
             .notify_on_command_finish_action = config.@"notify-on-command-finish-action",
             .notify_on_command_finish_after = config.@"notify-on-command-finish-after",
             .key_remaps = try config.@"key-remap".clone(alloc),
+            .suggestions = config.suggestions,
 
             // Assignments happen sequentially so we have to do this last
             // so that the memory is captured from allocs above.
@@ -634,6 +645,7 @@ pub fn init(
             .mutex = mutex,
             .terminal = &self.io.terminal,
         },
+        .suggestions = .init(alloc),
         .renderer_thr = undefined,
         .mouse = .{},
         .keyboard = .{},
@@ -646,6 +658,13 @@ pub fn init(
         // Our conditional state is initialized to the app state. This
         // lets us get the most likely correct color theme and so on.
         .config_conditional_state = app.config_conditional_state,
+    };
+
+    // Load inline suggestion sources. A failure here only costs us
+    // suggestions, so it must never stop a surface from opening.
+    self.renderer_state.suggestions = &self.suggestions;
+    self.reloadSuggestions(config) catch |err| {
+        log.warn("failed to load suggestions err={}", .{err});
     };
 
     // The command we're going to execute
@@ -829,6 +848,10 @@ pub fn init(
 pub fn deinit(self: *Surface) void {
     // Stop search thread
     if (self.search) |*s| s.deinit();
+
+    // The renderer reads this, so it must not outlive the render thread;
+    // we free it after the threads are joined below.
+    defer self.suggestions.deinit();
 
     // Stop rendering thread
     {
@@ -1819,6 +1842,12 @@ pub fn updateConfig(
     // based on our conditional state or the original config.
     const config: *const configpkg.Config = if (config_) |*c| c else original;
 
+    // Pick up edited snippets and history paths. Losing suggestions is not
+    // worth failing a config reload over.
+    self.reloadSuggestions(config) catch |err| {
+        log.warn("failed to reload suggestions err={}", .{err});
+    };
+
     // Update our new derived config immediately
     const derived = DerivedConfig.init(self.alloc, config) catch |err| {
         // If the derivation fails then we just log and return. We don't
@@ -2666,6 +2695,98 @@ fn balancePaddingIfNeeded(self: *Surface) void {
 /// the preedit state correctly.
 ///
 /// The preedit input must be UTF-8 encoded.
+/// Rebuild the inline suggestion sources from config.
+///
+/// The render thread reads this store while holding the renderer mutex, so
+/// we take it here too: rebuilding frees the strings it is walking.
+fn reloadSuggestions(self: *Surface, config: *const configpkg.Config) !void {
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+
+    try self.suggestions.setSnippets(config.@"suggestion-snippet".list.items);
+
+    const configured = config.@"suggestion-history-file".list.items;
+    if (configured.len > 0) {
+        try self.suggestions.loadHistory(configured);
+        return;
+    }
+
+    const paths = try Suggestions.defaultHistoryPaths(self.alloc);
+    defer {
+        for (paths) |p| self.alloc.free(p);
+        self.alloc.free(paths);
+    }
+    try self.suggestions.loadHistory(paths);
+}
+
+/// The text that accepting the current inline suggestion would type, or
+/// null when there is nothing to accept.
+///
+/// Computed on demand rather than shared with the renderer: the renderer
+/// works out what to draw on its own thread, and passing that back here
+/// would mean one more piece of cross-thread state to keep in step.
+///
+/// The caller owns the returned memory.
+fn pendingSuggestion(self: *Surface) !?[]u8 {
+    if (!self.config.suggestions) return null;
+
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+
+    if (self.renderer_state.preedit != null) return null;
+
+    const t = self.renderer_state.terminal;
+    if (!t.cursorIsAtPrompt()) return null;
+
+    const typed = (try t.screens.active.currentInput(self.alloc)) orelse return null;
+    defer self.alloc.free(typed);
+
+    const full = self.suggestions.match(typed) orelse return null;
+    const rest = full[typed.len..];
+    if (rest.len == 0) return null;
+
+    return try self.alloc.dupe(u8, rest);
+}
+
+/// Remember what is typed at the prompt as a suggestion candidate.
+///
+/// Called when the user presses enter. We can't wait for the shell to write
+/// its history file: zsh and bash typically only flush on exit, so the
+/// command you just ran would be the one thing we could never suggest.
+fn rememberCurrentInput(self: *Surface) !void {
+    if (!self.config.suggestions) return;
+
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+
+    const t = self.renderer_state.terminal;
+    if (!t.cursorIsAtPrompt()) return;
+
+    const typed = (try t.screens.active.currentInput(self.alloc)) orelse return;
+    defer self.alloc.free(typed);
+
+    try self.suggestions.remember(typed);
+}
+
+/// Accept the inline suggestion, if there is one.
+///
+/// Returns true when a suggestion was accepted, in which case the key that
+/// triggered us must not also reach the shell.
+fn acceptSuggestion(self: *Surface) !bool {
+    const rest = (try self.pendingSuggestion()) orelse return false;
+    errdefer self.alloc.free(rest);
+
+    // Type it as if the user had: the shell's line editor then holds the
+    // text, so everything downstream (history, editing, completion) sees a
+    // perfectly normal command line. queueIo takes ownership of the data,
+    // and drops it for us when the surface is read-only.
+    self.queueIo(.{ .write_alloc = .{
+        .alloc = self.alloc,
+        .data = rest,
+    } }, .unlocked);
+    return true;
+}
+
 pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
     // log.debug("text preeditCallback value={any}", .{preedit_});
 
@@ -2934,6 +3055,37 @@ pub fn keyCallback(
 
         break :event copy;
     };
+
+    // Remember what was typed so it can be suggested straight away. This
+    // never consumes the key; enter still reaches the shell as usual.
+    if (event.action == .press and
+        (event.key == .enter or event.key == .numpad_enter) and
+        event.mods.empty())
+    {
+        self.rememberCurrentInput() catch |err| {
+            log.warn("failed to remember command err={}", .{err});
+        };
+    }
+
+    // Tab accepts an inline suggestion. We only swallow the key when there
+    // is actually something to accept, so the rest of the time tab reaches
+    // the shell and completion keeps working as it always did.
+    //
+    // This sits after keybinding handling on purpose: a tab binding the
+    // user configured still wins.
+    if ((event.action == .press or event.action == .repeat) and
+        event.key == .tab and
+        event.mods.empty())
+    {
+        const accepted = self.acceptSuggestion() catch |err| accepted: {
+            log.warn("failed to accept suggestion err={}", .{err});
+            break :accepted false;
+        };
+        if (accepted) {
+            try self.queueRender();
+            return .consumed;
+        }
+    }
 
     // Encode and send our key. If we didn't encode anything, then we
     // return the effect as ignored.

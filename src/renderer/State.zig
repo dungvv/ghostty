@@ -6,6 +6,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Inspector = @import("../inspector/main.zig").Inspector;
+const Suggestions = @import("../Suggestions.zig");
 const terminalpkg = @import("../terminal/main.zig");
 const inputpkg = @import("../input.zig");
 const renderer = @import("../renderer.zig");
@@ -28,6 +29,13 @@ inspector: ?*Inspector = null,
 /// Preedit can in theory be multiple codepoints long but that is left as
 /// a future exercise.
 preedit: ?Preedit = null,
+
+/// The source of inline command suggestions, owned by the surface.
+///
+/// The renderer reads this while holding the mutex to work out what to draw
+/// dimmed after the cursor. It is only ever replaced wholesale on a config
+/// reload, so reads are safe.
+suggestions: ?*const Suggestions = null,
 
 /// Mouse state. This only contains state relevant to what renderers
 /// need about the mouse.

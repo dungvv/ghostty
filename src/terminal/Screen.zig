@@ -3554,6 +3554,71 @@ fn selectWordCodepoint(pin: Pin) ?u21 {
 /// This will return null if a selection is impossible:
 ///  - the point pt is outside of the written screen space.
 ///  - the point pt is on a prompt / input line.
+/// The text the user has typed at the current prompt, or null when we
+/// can't tell.
+///
+/// Shell integration tags every cell as prompt, input or output (OSC 133),
+/// so we can walk back from the cursor and keep only the cells the user
+/// actually typed. That means we never have to guess where the prompt
+/// string ends, which is what makes this hold up against themed, coloured
+/// and multi-line prompts.
+///
+/// Returns null when there is still input to the right of the cursor:
+/// appending a suggestion only makes sense at the end of the line.
+///
+/// The caller owns the returned memory.
+pub fn currentInput(
+    self: *const Screen,
+    alloc: Allocator,
+) Allocator.Error!?[]u8 {
+    const cursor_pin = self.cursor.page_pin.*;
+
+    // If the cell under the cursor is itself typed input then the user has
+    // moved back into the middle of the line.
+    {
+        const rac = cursor_pin.rowAndCell();
+        if (rac.cell.semantic_content == .input and rac.cell.hasText()) {
+            return null;
+        }
+    }
+
+    // Collect backwards, then flip. Walking left is the only direction in
+    // which we know where the input stops.
+    var reversed: std.ArrayList(u21) = .empty;
+    defer reversed.deinit(alloc);
+
+    var it = cursor_pin.cellIterator(.left_up, null);
+    _ = it.next(); // the cell under the cursor
+    while (it.next()) |p| {
+        const cell = p.rowAndCell().cell;
+        if (cell.semantic_content != .input) break;
+        switch (cell.content_tag) {
+            .codepoint, .codepoint_grapheme => {
+                const cp = cell.content.codepoint.data;
+                if (cp == 0) break;
+                try reversed.append(alloc, cp);
+            },
+
+            // Wide character tails and background-only cells can't carry
+            // text we could match on.
+            else => break,
+        }
+    }
+
+    if (reversed.items.len == 0) return null;
+    std.mem.reverse(u21, reversed.items);
+
+    var buf: std.ArrayList(u8) = .empty;
+    errdefer buf.deinit(alloc);
+    for (reversed.items) |cp| {
+        var encoded: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(cp, &encoded) catch continue;
+        try buf.appendSlice(alloc, encoded[0..n]);
+    }
+
+    return try buf.toOwnedSlice(alloc);
+}
+
 pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
     // If our pin right now is not on output, then we return nothing.
     if (pin.rowAndCell().cell.semantic_content != .output) return null;
@@ -10921,6 +10986,70 @@ test "Screen: selectWord with character boundary" {
             } }, s.pages.pointFromPin(.screen, sel.end()).?);
         }
     }
+}
+
+test "Screen: currentInput reads typed text without the prompt" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var s = try init(io, alloc, .{ .cols = 30, .rows = 5, .max_scrollback_bytes = 0 });
+    defer s.deinit();
+
+    s.cursorSetSemanticContent(.{ .prompt = .initial });
+    try s.testWriteString("user@host $ ");
+    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
+    try s.testWriteString("git comm");
+
+    const input = (try s.currentInput(alloc)).?;
+    defer alloc.free(input);
+    try testing.expectEqualStrings("git comm", input);
+}
+
+test "Screen: currentInput is null with nothing typed" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var s = try init(io, alloc, .{ .cols = 30, .rows = 5, .max_scrollback_bytes = 0 });
+    defer s.deinit();
+
+    s.cursorSetSemanticContent(.{ .prompt = .initial });
+    try s.testWriteString("$ ");
+
+    try testing.expect(try s.currentInput(alloc) == null);
+}
+
+test "Screen: currentInput is null in command output" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var s = try init(io, alloc, .{ .cols = 30, .rows = 5, .max_scrollback_bytes = 0 });
+    defer s.deinit();
+
+    s.cursorSetSemanticContent(.output);
+    try s.testWriteString("some output");
+
+    try testing.expect(try s.currentInput(alloc) == null);
+}
+
+test "Screen: currentInput keeps spaces inside the command" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var s = try init(io, alloc, .{ .cols = 40, .rows = 5, .max_scrollback_bytes = 0 });
+    defer s.deinit();
+
+    s.cursorSetSemanticContent(.{ .prompt = .initial });
+    try s.testWriteString("$ ");
+    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
+    try s.testWriteString("ssh -p 2222 dev");
+
+    const input = (try s.currentInput(alloc)).?;
+    defer alloc.free(input);
+    try testing.expectEqualStrings("ssh -p 2222 dev", input);
 }
 
 test "Screen: selectOutput" {

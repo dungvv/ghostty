@@ -2985,6 +2985,46 @@ keybind: Keybinds = .{},
 /// `xterm-256color` with environment variables if terminfo installation fails.
 @"shell-integration-features": ShellIntegrationFeatures = .{},
 
+/// Show an inline suggestion of the most likely full command while you type
+/// at a shell prompt, drawn dimmed after the cursor. Press tab to accept it.
+///
+/// Suggestions come from your shell history plus any `suggestion-snippet`
+/// entries. Snippets are offered first, then the most recent matching
+/// command from history.
+///
+/// This requires shell integration, because it is what tells Ghostty which
+/// characters on screen are the prompt and which are what you typed. Without
+/// it nothing is ever suggested. For the same reason, suggestions do not
+/// appear inside full screen programs such as an editor or pager, and do not
+/// follow you to a remote host over ssh unless shell integration is active
+/// there too.
+///
+/// Tab only accepts a suggestion while one is visible. With nothing to
+/// accept, tab is sent to the shell as usual, so completion keeps working.
+suggestions: bool = true,
+
+/// A command to offer as a suggestion, ahead of anything from history.
+///
+/// Repeat this to add more than one. Set it to an empty value to clear the
+/// list, which is useful to drop entries inherited from an earlier config
+/// file.
+///
+/// ```ini
+/// suggestion-snippet = docker compose up -d --build
+/// suggestion-snippet = git log --oneline --graph --decorate
+/// ```
+@"suggestion-snippet": RepeatableString = .{},
+
+/// A shell history file to read suggestions from.
+///
+/// When empty, Ghostty looks for `~/.zsh_history`, `~/.bash_history` and
+/// `~/.local/share/fish/fish_history`, in that order, and reads whichever
+/// exist. Set this to use a different file, and repeat it for more than one.
+/// Earlier files win when the same command appears in several.
+///
+/// zsh extended history, plain history and fish's format are all understood.
+@"suggestion-history-file": RepeatableString = .{},
+
 /// Custom entries into the command palette.
 ///
 /// Each entry requires the title, the corresponding action, and an optional
