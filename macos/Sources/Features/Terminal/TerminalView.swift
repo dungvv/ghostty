@@ -95,8 +95,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                                 #selector(TerminalController.newTab(_:)),
                                 to: nil,
                                 from: nil)
-                        },
-                        onCollapse: { viewModel.tabSidebarIsVisible = false })
+                        })
                         .frame(width: ghostty.config.tabSidebarWidth)
                     Divider().overlay(OttyTheme.divider)
                 }
@@ -107,8 +106,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     Divider().overlay(OttyTheme.divider)
                     TerminalInfoPanel(
                         surface: lastFocusedSurface?.value,
-                        topInset: panelTopInset,
-                        onClose: { viewModel.infoPanelIsVisible = false })
+                        topInset: panelTopInset)
                         .frame(width: ghostty.config.infoPanelWidth)
                 }
             }

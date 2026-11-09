@@ -18,9 +18,6 @@ struct TerminalInfoPanel: View {
     /// titlebar of its own.
     var topInset: CGFloat
 
-    /// Hide the panel.
-    var onClose: (() -> Void)?
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -52,15 +49,6 @@ struct TerminalInfoPanel: View {
                 .font(OttyTheme.heading)
 
             Spacer()
-
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "sidebar.trailing")
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.plain)
-                .help("Hide Info Panel")
-            }
         }
         .foregroundStyle(OttyTheme.headingText)
         .padding(.top, topInset)

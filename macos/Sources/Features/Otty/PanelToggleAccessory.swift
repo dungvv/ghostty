@@ -9,13 +9,21 @@ import SwiftUI
 /// to the terminal instead of leaving a control behind.
 @MainActor
 final class PanelToggleAccessory: NSTitlebarAccessoryViewController {
+    /// Which panel this button belongs to, which is also which end of the
+    /// titlebar it sits at: a control for the left panel belongs on the left.
+    enum Side {
+        case leading
+        case trailing
+    }
+
     private let controller: BaseTerminalController
 
-    init(controller: BaseTerminalController) {
+    init(controller: BaseTerminalController, side: Side) {
         self.controller = controller
         super.init(nibName: nil, bundle: nil)
 
-        let hosting = NSHostingView(rootView: PanelToggleView(controller: controller))
+        let hosting = NSHostingView(
+            rootView: PanelToggleView(controller: controller, side: side))
         hosting.translatesAutoresizingMaskIntoConstraints = false
         let container = NSView()
         container.addSubview(hosting)
@@ -25,33 +33,35 @@ final class PanelToggleAccessory: NSTitlebarAccessoryViewController {
             hosting.topAnchor.constraint(equalTo: container.topAnchor),
             hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
-        container.frame = NSRect(x: 0, y: 0, width: 64, height: 28)
+        container.frame = NSRect(x: 0, y: 0, width: 34, height: 28)
         view = container
 
-        // Right of the title, which keeps it clear of the traffic lights at
-        // the other end of the same row.
-        layoutAttribute = .right
+        layoutAttribute = side == .leading ? .left : .right
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
     }
 
-    /// Add the accessory to `window`, unless it already has one.
+    /// Add both accessories to `window`, unless they are already there.
     static func install(on window: NSWindow, controller: BaseTerminalController) {
         guard !window.titlebarAccessoryViewControllers.contains(where: {
             $0 is PanelToggleAccessory
         }) else { return }
-        window.addTitlebarAccessoryViewController(
-            PanelToggleAccessory(controller: controller))
+        for side: Side in [.leading, .trailing] {
+            window.addTitlebarAccessoryViewController(
+                PanelToggleAccessory(controller: controller, side: side))
+        }
     }
 }
 
 private struct PanelToggleView: View {
     @ObservedObject var controller: BaseTerminalController
+    let side: PanelToggleAccessory.Side
 
     var body: some View {
-        HStack(spacing: 10) {
+        switch side {
+        case .leading:
             toggle(
                 icon: "sidebar.leading",
                 on: controller.tabSidebarIsVisible,
@@ -61,7 +71,9 @@ private struct PanelToggleView: View {
             ) {
                 controller.tabSidebarIsVisible.toggle()
             }
+            .padding(.leading, 6)
 
+        case .trailing:
             toggle(
                 icon: "sidebar.trailing",
                 on: controller.infoPanelIsVisible,
@@ -71,8 +83,8 @@ private struct PanelToggleView: View {
             ) {
                 controller.infoPanelIsVisible.toggle()
             }
+            .padding(.trailing, 12)
         }
-        .padding(.trailing, 12)
     }
 
     private func toggle(

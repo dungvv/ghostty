@@ -14,9 +14,6 @@ struct TerminalTabsSidebar: View {
     /// Called when the user asks for a new tab.
     var onNewTab: (() -> Void)?
 
-    /// Hide the sidebar.
-    var onCollapse: (() -> Void)?
-
     @State private var hovered: Int?
 
     var body: some View {
@@ -62,16 +59,6 @@ struct TerminalTabsSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .help("New Tab")
-            }
-
-            if let onCollapse {
-                Button(action: onCollapse) {
-                    Image(systemName: "sidebar.leading")
-                        .font(.system(size: 11))
-                        .foregroundStyle(OttyTheme.secondaryText)
-                }
-                .buttonStyle(.plain)
-                .help("Hide Tab Sidebar (⌃⌘S)")
             }
         }
         .padding(.top, topInset)
