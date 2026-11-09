@@ -22,27 +22,37 @@ final class SSHMenuController: NSObject, NSMenuDelegate, NSMenuItemValidation {
             return
         }
 
-        let connectMenu = NSMenu(title: "Connect to Server")
+        let connectMenu = NSMenu(title: "Saved Connections")
         connectMenu.delegate = self
         self.connectMenu = connectMenu
 
         let connectItem = NSMenuItem(
-            title: "Connect to Server", action: nil, keyEquivalent: "")
+            title: "Saved Connections", action: nil, keyEquivalent: "")
         connectItem.submenu = connectMenu
 
         let manageItem = NSMenuItem(
             title: "SSH Connections…",
             action: #selector(showConnectionManager(_:)),
-            keyEquivalent: "")
+            keyEquivalent: "s")
+        manageItem.keyEquivalentModifierMask = [.command, .option]
         manageItem.target = self
         manageItem.identifier = Self.manageItemIdentifier
+
+        let pickerItem = NSMenuItem(
+            title: "Connect to Server…",
+            action: #selector(showConnectionPicker(_:)),
+            keyEquivalent: "S")
+        // A capital "S" with .shift is how AppKit spells ⌘⇧S.
+        pickerItem.keyEquivalentModifierMask = [.command, .shift]
+        pickerItem.target = self
 
         // Place these just after the "new window / new tab" group.
         let index = fileMenu.items.firstIndex(where: { $0.isSeparatorItem }).map { $0 + 1 }
             ?? fileMenu.numberOfItems
-        fileMenu.insertItem(manageItem, at: index)
-        fileMenu.insertItem(connectItem, at: index + 1)
-        fileMenu.insertItem(.separator(), at: index + 2)
+        fileMenu.insertItem(pickerItem, at: index)
+        fileMenu.insertItem(manageItem, at: index + 1)
+        fileMenu.insertItem(connectItem, at: index + 2)
+        fileMenu.insertItem(.separator(), at: index + 3)
 
         installSidebarItem(in: mainMenu)
 
@@ -54,7 +64,7 @@ final class SSHMenuController: NSObject, NSMenuDelegate, NSMenuItemValidation {
             object: nil)
     }
 
-    /// Add "Show SSH Sidebar" to the View menu.
+    /// Add the panel toggles to the View menu.
     private func installSidebarItem(in mainMenu: NSMenu) {
         guard let viewMenu = mainMenu.items.compactMap(\.submenu).first(where: {
             $0.title == "View"
@@ -62,16 +72,25 @@ final class SSHMenuController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         guard !viewMenu.items.contains(where: { $0.identifier == Self.sidebarItemIdentifier })
         else { return }
 
-        let item = NSMenuItem(
-            title: "Show SSH Sidebar",
-            action: #selector(toggleSSHSidebar(_:)),
+        let sidebar = NSMenuItem(
+            title: "Show Tab Sidebar",
+            action: #selector(toggleTabSidebar(_:)),
             keyEquivalent: "s")
-        item.keyEquivalentModifierMask = [.control, .command]
-        item.target = self
-        item.identifier = Self.sidebarItemIdentifier
+        sidebar.keyEquivalentModifierMask = [.control, .command]
+        sidebar.target = self
+        sidebar.identifier = Self.sidebarItemIdentifier
+
+        let info = NSMenuItem(
+            title: "Show Info Panel",
+            action: #selector(toggleInfoPanel(_:)),
+            keyEquivalent: "i")
+        info.keyEquivalentModifierMask = [.control, .command]
+        info.target = self
+        info.identifier = Self.infoItemIdentifier
 
         viewMenu.addItem(.separator())
-        viewMenu.addItem(item)
+        viewMenu.addItem(sidebar)
+        viewMenu.addItem(info)
     }
 
     // MARK: - Actions
@@ -80,26 +99,40 @@ final class SSHMenuController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         SSHConnectionManagerController.shared.show()
     }
 
-    /// Toggle the sidebar on the frontmost terminal window only. This is
+    @objc func showConnectionPicker(_ sender: Any?) {
+        SSHConnectionPickerController.shared.toggle()
+    }
+
+    /// Toggle a panel on the frontmost terminal window only. These are
     /// intentionally not persisted: the configuration owns the default.
-    @objc private func toggleSSHSidebar(_ sender: Any?) {
+    @objc private func toggleTabSidebar(_ sender: Any?) {
         guard let controller = TerminalController.preferredParent else { return }
-        controller.sshSidebarIsVisible.toggle()
+        controller.tabSidebarIsVisible.toggle()
+    }
+
+    @objc private func toggleInfoPanel(_ sender: Any?) {
+        guard let controller = TerminalController.preferredParent else { return }
+        controller.infoPanelIsVisible.toggle()
     }
 
     // MARK: - NSMenuItemValidation
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        guard menuItem.identifier == Self.sidebarItemIdentifier else { return true }
+        let isPanelToggle = menuItem.identifier == Self.sidebarItemIdentifier
+            || menuItem.identifier == Self.infoItemIdentifier
+        guard isPanelToggle else { return true }
 
-        // The sidebar belongs to a terminal window, so the item is dead when
-        // the frontmost window isn't one (the connection manager, say).
+        // These panels belong to a terminal window, so the items are dead
+        // when the frontmost window isn't one (the connection manager, say).
         guard let controller = TerminalController.preferredParent else {
             menuItem.state = .off
             return false
         }
 
-        menuItem.state = controller.sshSidebarIsVisible ? .on : .off
+        let shown = menuItem.identifier == Self.sidebarItemIdentifier
+            ? controller.tabSidebarIsVisible
+            : controller.infoPanelIsVisible
+        menuItem.state = shown ? .on : .off
         return true
     }
 
@@ -181,5 +214,6 @@ final class SSHMenuController: NSObject, NSMenuDelegate, NSMenuItemValidation {
     }
 
     private static let manageItemIdentifier = NSUserInterfaceItemIdentifier("GhosttySSHManage")
-    private static let sidebarItemIdentifier = NSUserInterfaceItemIdentifier("GhosttySSHSidebar")
+    private static let sidebarItemIdentifier = NSUserInterfaceItemIdentifier("GhosttyTabSidebar")
+    private static let infoItemIdentifier = NSUserInterfaceItemIdentifier("GhosttyInfoPanel")
 }

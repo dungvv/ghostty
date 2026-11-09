@@ -59,10 +59,18 @@ class BaseTerminalController: NSWindowController,
     /// Set if the terminal view should show the update overlay.
     @Published var updateOverlayIsVisible: Bool = false
 
-    /// Whether the SSH connection sidebar is shown. This defaults to false so
-    /// windows that don't opt in (the quick terminal) never get a sidebar;
+    /// Whether the tab sidebar is shown. This defaults to false so windows
+    /// that don't opt in (the quick terminal) never get a sidebar;
     /// `TerminalController` seeds it from the configuration instead.
-    @Published var sshSidebarIsVisible: Bool = false
+    @Published var tabSidebarIsVisible: Bool = false
+
+    /// Whether the info panel is shown, on the same terms as the sidebar.
+    @Published var infoPanelIsVisible: Bool = false
+
+    /// The tabs open alongside this one. Created lazily because the quick
+    /// terminal and other non-tabbed windows never show the sidebar.
+    lazy private(set) var tabsModel = TerminalTabsModel(
+        window: { [weak self] in self?.window })
 
     /// True when any surface in this controller currently has an active bell.
     @Published private(set) var bell: Bool = false

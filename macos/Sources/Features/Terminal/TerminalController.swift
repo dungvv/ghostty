@@ -79,9 +79,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         super.init(ghostty, baseConfig: base, surfaceTree: tree)
 
         // The configuration decides the state a new window starts in. After
-        // this the sidebar is toggled per-window from the View menu, which we
+        // this the panels are toggled per-window from the View menu, which we
         // deliberately don't persist.
-        self.sshSidebarIsVisible = ghostty.config.sshSidebar
+        self.tabSidebarIsVisible = ghostty.config.tabSidebar
+        self.infoPanelIsVisible = ghostty.config.infoPanel
 
         // Setup our notifications for behaviors
         let center = NotificationCenter.default
@@ -570,9 +571,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             self.derivedConfig = DerivedConfig(config)
             syncRestoration(config)
 
-            // Reloading the config resets the sidebar to the configured
+            // Reloading the config resets the panels to the configured
             // state, discarding any temporary toggle from the View menu.
-            self.sshSidebarIsVisible = config.sshSidebar
+            self.tabSidebarIsVisible = config.tabSidebar
+            self.infoPanelIsVisible = config.infoPanel
 
             // If we have no surfaces in our window (is that possible?) then we update
             // our window appearance based on the root config. If we have surfaces, we
@@ -1144,6 +1146,17 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
                     window.setFrameOrigin(frame.origin)
                 }
             }
+        }
+
+        // Panel toggles go in the titlebar, beside the window buttons.
+        PanelToggleAccessory.install(on: window, controller: self)
+
+        // The side panels take their width out of the window, so a window
+        // sized the usual way leaves the terminal itself narrower than it
+        // would otherwise be. Widen it once SwiftUI has laid out and the
+        // surface knows its cell size, which it doesn't yet here.
+        DispatchQueue.main.async { [weak self] in
+            self?.ensureMinimumTerminalWidth()
         }
 
         // In various situations, macOS automatically tabs new windows. Ghostty handles
@@ -1782,6 +1795,55 @@ extension TerminalController {
         default:
             return super.validateMenuItem(item)
         }
+    }
+}
+
+// MARK: Minimum Terminal Width
+
+extension TerminalController {
+    /// The narrowest terminal we will start a window with, in columns.
+    ///
+    /// 80 because that is what almost everything that draws its own output
+    /// still assumes, and a window that starts narrower than that wraps the
+    /// first thing it prints.
+    private static let minimumStartupColumns: CGFloat = 80
+
+    /// Widen the window if the panels have squeezed the terminal below the
+    /// minimum. Only ever grows the window, and never past the screen.
+    func ensureMinimumTerminalWidth() {
+        guard let window, let contentView = window.contentView else { return }
+
+        // A maximized or fullscreen window is already as wide as it can be,
+        // and a restored one is the size the user themselves left it.
+        guard !derivedConfig.maximize, !window.styleMask.contains(.fullScreen) else { return }
+
+        let cellWidth = focusedSurface?.cellSize.width ?? 0
+        guard cellWidth > 0 else { return }
+
+        var panels: CGFloat = 0
+        // The +1 is the divider drawn beside each panel.
+        if tabSidebarIsVisible { panels += ghostty.config.tabSidebarWidth + 1 }
+        if infoPanelIsVisible { panels += ghostty.config.infoPanelWidth + 1 }
+        guard panels > 0 else { return }
+
+        let needed = panels + Self.minimumStartupColumns * cellWidth
+        let shortfall = needed - contentView.frame.width
+        guard shortfall > 0 else { return }
+
+        var frame = window.frame
+        frame.size.width += shortfall
+        if let screen = window.screen ?? NSScreen.main {
+            // Prefer to keep the window on screen: slide it left before
+            // letting it grow off the right edge, and give up on the part
+            // that still doesn't fit.
+            frame.size.width = min(frame.size.width, screen.visibleFrame.width)
+            if frame.maxX > screen.visibleFrame.maxX {
+                frame.origin.x = max(
+                    screen.visibleFrame.minX,
+                    screen.visibleFrame.maxX - frame.size.width)
+            }
+        }
+        window.setFrame(frame, display: true)
     }
 }
 

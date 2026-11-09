@@ -391,27 +391,45 @@ extension Ghostty {
             return v
         }
 
-        /// Whether new terminal windows start with the SSH connection sidebar
-        /// shown. This is only the initial state; the sidebar can be toggled
-        /// per window from the View menu.
-        var sshSidebar: Bool {
+        /// Whether new terminal windows start with the tab sidebar shown. This
+        /// is only the initial state; the sidebar can be toggled per window
+        /// from the View menu.
+        var tabSidebar: Bool {
+            boolValue("macos-tab-sidebar")
+        }
+
+        /// Width of the tab sidebar, in points.
+        var tabSidebarWidth: CGFloat {
+            widthValue("macos-tab-sidebar-width", default: 220, minimum: 150)
+        }
+
+        /// Whether new terminal windows start with the info panel shown.
+        var infoPanel: Bool {
+            boolValue("macos-info-panel")
+        }
+
+        /// Width of the info panel, in points.
+        var infoPanelWidth: CGFloat {
+            widthValue("macos-info-panel-width", default: 240, minimum: 180)
+        }
+
+        private func boolValue(_ key: String) -> Bool {
             guard let config = self.config else { return false }
             var v = false
-            let key = "macos-ssh-sidebar"
             _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
             return v
         }
 
-        /// Width of the SSH connection sidebar, in points.
-        var sshSidebarWidth: CGFloat {
-            let defaultValue: CGFloat = 260
-            let minimumValue: CGFloat = 160
+        private func widthValue(
+            _ key: String,
+            default defaultValue: CGFloat,
+            minimum: CGFloat
+        ) -> CGFloat {
             guard let config = self.config else { return defaultValue }
             var v: UInt32?
-            let key = "macos-ssh-sidebar-width"
             guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))),
                   let v else { return defaultValue }
-            return max(minimumValue, CGFloat(v))
+            return max(minimum, CGFloat(v))
         }
 
         var macosIcon: MacOSIcon {

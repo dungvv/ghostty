@@ -3573,26 +3573,46 @@ suggestions: bool = true,
 /// find false more visually appealing.
 @"macos-window-shadow": bool = true,
 
-/// Show a sidebar on the left of every terminal window listing your saved
-/// SSH connections, grouped by the group assigned to each one.
+/// Show a sidebar on the left of every terminal window listing the tabs open
+/// in it, with the program running in each one beside its title.
 ///
 /// This only sets the state a newly opened window starts in. The sidebar can
 /// still be shown or hidden for the focused window at any time from
-/// View > Show SSH Sidebar, and that choice is not persisted.
+/// View > Show Tab Sidebar, and that choice is not persisted.
 ///
-/// Connections are managed from File > SSH Connections, and are stored
-/// separately from this file. The sidebar never appears in the quick terminal.
+/// The sidebar never appears in the quick terminal.
 ///
 /// Only implemented on macOS.
-@"macos-ssh-sidebar": bool = false,
+@"macos-tab-sidebar": bool = true,
 
-/// The width, in points, of the sidebar enabled by `macos-ssh-sidebar`.
+/// The width, in points, of the sidebar enabled by `macos-tab-sidebar`.
 ///
-/// Values below 160 are clamped to 160, since anything narrower can't show a
-/// connection name and its buttons at the same time.
+/// Values below 150 are clamped to 150, since anything narrower can't show a
+/// tab title and its process name at the same time.
 ///
 /// Only implemented on macOS.
-@"macos-ssh-sidebar-width": u32 = 260,
+@"macos-tab-sidebar-width": u32 = 220,
+
+/// Show a panel on the right of every terminal window describing the focused
+/// tab: its working directory, the process running in it, and any TCP ports
+/// that process or its children are listening on.
+///
+/// Ports are found with `lsof`, scoped to the tab's own process tree, and are
+/// refreshed every few seconds rather than continuously.
+///
+/// This only sets the state a newly opened window starts in. The panel can
+/// still be shown or hidden from View > Show Info Panel, and that choice is
+/// not persisted. It never appears in the quick terminal.
+///
+/// Only implemented on macOS.
+@"macos-info-panel": bool = false,
+
+/// The width, in points, of the panel enabled by `macos-info-panel`.
+///
+/// Values below 180 are clamped to 180.
+///
+/// Only implemented on macOS.
+@"macos-info-panel-width": u32 = 240,
 
 /// If true, the macOS icon in the dock and app switcher will be hidden. This is
 /// mainly intended for those primarily using the quick-terminal mode.

@@ -36,10 +36,16 @@ protocol TerminalViewModel: ObservableObject {
     /// The update overlay should be visible.
     var updateOverlayIsVisible: Bool { get }
 
-    /// Whether the SSH connection sidebar is shown for this window. This
-    /// should be @Published. Only normal terminal windows set this; the quick
-    /// terminal leaves it false.
-    var sshSidebarIsVisible: Bool { get set }
+    /// Whether the tab sidebar is shown for this window. This should be
+    /// @Published. Only normal terminal windows set this; the quick terminal
+    /// leaves it false.
+    var tabSidebarIsVisible: Bool { get set }
+
+    /// Whether the info panel is shown, on the same terms.
+    var infoPanelIsVisible: Bool { get set }
+
+    /// The tabs open in this window, for the sidebar.
+    var tabsModel: TerminalTabsModel { get }
 }
 
 /// The main terminal view. This terminal view supports splits.
@@ -77,15 +83,49 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
             ErrorView()
         case .ready:
             HStack(spacing: 0) {
-                if viewModel.sshSidebarIsVisible {
-                    TerminalSSHSidebar(store: SSHConnectionStore.shared)
-                        .frame(width: ghostty.config.sshSidebarWidth)
-                    Divider()
+                if viewModel.tabSidebarIsVisible {
+                    TerminalTabsSidebar(
+                        model: viewModel.tabsModel,
+                        topInset: panelTopInset,
+                        // Up the responder chain rather than through the
+                        // delegate: the controller already answers `newTab:`
+                        // for the File menu, so this is the same path.
+                        onNewTab: {
+                            NSApp.sendAction(
+                                #selector(TerminalController.newTab(_:)),
+                                to: nil,
+                                from: nil)
+                        },
+                        onCollapse: { viewModel.tabSidebarIsVisible = false })
+                        .frame(width: ghostty.config.tabSidebarWidth)
+                    Divider().overlay(OttyTheme.divider)
                 }
 
                 terminalContent
+
+                if viewModel.infoPanelIsVisible {
+                    Divider().overlay(OttyTheme.divider)
+                    TerminalInfoPanel(
+                        surface: lastFocusedSurface?.value,
+                        topInset: panelTopInset,
+                        onClose: { viewModel.infoPanelIsVisible = false })
+                        .frame(width: ghostty.config.infoPanelWidth)
+                }
             }
+            // The panels run the full height of the window, under the
+            // traffic lights, which is what gives the single-surface look
+            // rather than a titlebar sitting above them.
+            .ignoresSafeArea(.container, edges: .top)
         }
+    }
+
+    /// How far down a side panel's content starts.
+    ///
+    /// With the titlebar hidden the panels run to the top of the window and
+    /// the traffic lights float over them, so the content has to clear those.
+    /// With a real titlebar the panels begin below it and need no such gap.
+    private var panelTopInset: CGFloat {
+        ghostty.config.macosTitlebarStyle == .hidden ? 34 : 10
     }
 
     /// Everything to the right of the SSH sidebar: the splits plus the
