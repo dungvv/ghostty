@@ -214,11 +214,8 @@ class TerminalWindow: NSWindow {
 
         // Its possible we miss the accessory titlebar call so we check again
         // whenever the window becomes main. Both of these are idempotent.
-        if tabBarView != nil {
-            tabBarDidAppear()
-        } else {
-            tabBarDidDisappear()
-        }
+        hideTabBarAccessory()
+        tabBarDidDisappear()
         viewModel.isMainWindow = true
     }
 
@@ -260,7 +257,12 @@ class TerminalWindow: NSWindow {
         // it. This has been verified to work on macOS 12 to 26
         if isTabBar(childViewController) {
             childViewController.identifier = Self.tabBarIdentifier
-            tabBarDidAppear()
+            hideTabBarAccessory()
+
+            // Deliberately the "no tab bar" path: the row is collapsed, so the
+            // reset-zoom button it would otherwise host has to stay in the
+            // titlebar, where it is still visible.
+            tabBarDidDisappear()
         }
     }
 
@@ -277,6 +279,21 @@ class TerminalWindow: NSWindow {
     /// This identifier is attached to the tab bar view controller when we detect it being
     /// added.
     static let tabBarIdentifier: NSUserInterfaceItemIdentifier = .init("_ghosttyTabBar")
+
+    /// Take AppKit's own tab row away.
+    ///
+    /// The tab sidebar lists the same tabs with room for their full titles, so
+    /// the row under the titlebar only repeats it. `toggleTabBar(_:)` does
+    /// nothing here because these windows use `tabbingMode = .preferred`, which
+    /// keeps AppKit's bar on, so the accessory hosting it is collapsed instead.
+    /// Collapsing rather than removing leaves the accessory where AppKit put it,
+    /// so the tab group, its ordering and `isTabBarVisible` all stay intact.
+    func hideTabBarAccessory() {
+        for accessory in titlebarAccessoryViewControllers
+        where accessory.identifier == Self.tabBarIdentifier && !accessory.isHidden {
+            accessory.isHidden = true
+        }
+    }
 
     func isTabBar(_ childViewController: NSTitlebarAccessoryViewController) -> Bool {
         if childViewController.identifier == nil {
@@ -300,18 +317,6 @@ class TerminalWindow: NSWindow {
         // View controllers should be tagged with this as soon as possible to
         // increase our accuracy. We do this manually.
         return childViewController.identifier == Self.tabBarIdentifier
-    }
-
-    private func tabBarDidAppear() {
-        // Remove our reset zoom accessory. For some reason having a SwiftUI
-        // titlebar accessory causes our content view scaling to be wrong.
-        // Removing it fixes it, we just need to remember to add it again later.
-        if let idx = titlebarAccessoryViewControllers.firstIndex(of: resetZoomAccessory) {
-            removeTitlebarAccessoryViewController(at: idx)
-        }
-
-        // We don't need to do this with the update accessory. I don't know why but
-        // everything works fine.
     }
 
     private func tabBarDidDisappear() {
