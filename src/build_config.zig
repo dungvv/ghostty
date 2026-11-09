@@ -55,7 +55,15 @@ pub const i18n: bool = config.i18n;
 /// There are many places that don't use this variable so simply swapping
 /// this variable is NOT ENOUGH to change the bundle ID. I just wanted to
 /// avoid it in Zig coe as much as possible.
-pub const bundle_id = "com.dungvv.ghostty";
+pub const bundle_id = "com.dungvv.soultty";
+
+/// The gettext domain, i.e. the base name of the installed message catalogs.
+///
+/// This deliberately does NOT follow `bundle_id`. The catalogs are named by
+/// `GhosttyI18n.zig` and shipped as files on disk (`po/<domain>.pot`), so
+/// renaming the bundle while leaving them alone would make every lookup miss
+/// and silently fall back to English.
+pub const i18n_domain = "com.mitchellh.ghostty";
 
 /// True if we should have "slow" runtime safety checks. The initial motivation
 /// for this was terminal page/pagelist integrity checks. These were VERY

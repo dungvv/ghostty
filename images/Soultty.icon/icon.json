@@ -97,13 +97,13 @@
           "fill" : "automatic",
           "glass" : false,
           "hidden" : false,
-          "image-name" : "Ghostty.png",
-          "name" : "Ghostty",
+          "image-name" : "Soultty.png",
+          "name" : "Soultty",
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -185.015625,
-              -143.8359375
+              0,
+              0
             ]
           }
         },
@@ -114,13 +114,13 @@
           },
           "glass" : true,
           "hidden" : false,
-          "image-name" : "Ghostty.png",
-          "name" : "GhosttyBlur",
+          "image-name" : "Soultty.png",
+          "name" : "SoulttyBlur",
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -186.59375,
-              -143.8359375
+              0,
+              0
             ]
           }
         },

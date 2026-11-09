@@ -44,8 +44,8 @@ pub fn init(resources_dir: []const u8) InitError!void {
                 return error.OutOfMemory;
 
             // Bind our bundle ID to the given locale path
-            log.debug("binding domain={s} path={s}", .{ build_config.bundle_id, path });
-            _ = bindtextdomain(build_config.bundle_id, path.ptr) orelse
+            log.debug("binding domain={s} path={s}", .{ build_config.i18n_domain, path });
+            _ = bindtextdomain(build_config.i18n_domain, path.ptr) orelse
                 return error.OutOfMemory;
         },
     }
@@ -58,7 +58,7 @@ pub fn init(resources_dir: []const u8) InitError!void {
 /// Ghostty application. This should not be called for libghostty users.
 pub fn initGlobalDomain() error{OutOfMemory}!void {
     if (comptime !build_config.i18n) return;
-    _ = textdomain(build_config.bundle_id) orelse return error.OutOfMemory;
+    _ = textdomain(build_config.i18n_domain) orelse return error.OutOfMemory;
 }
 
 /// Translate a message for the Ghostty domain.
@@ -69,7 +69,7 @@ pub fn initGlobalDomain() error{OutOfMemory}!void {
 pub fn _(msgid: [*:0]const u8) [*:0]const u8 {
     if (comptime !build_config.i18n) return msgid;
     if (@inComptime()) return msgid;
-    return dgettext(build_config.bundle_id, msgid);
+    return dgettext(build_config.i18n_domain, msgid);
 }
 
 /// Mark a string for translation without translating it immediately.
